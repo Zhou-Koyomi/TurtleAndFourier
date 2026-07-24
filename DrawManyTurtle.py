@@ -1,44 +1,73 @@
 import turtle as tl
-import math
+import ast
+import glob
+import re
+import numpy as np
 
 '''
-作者：北理咕小头
-简介：
-    这是一个导入图形傅里叶级数信息，并利用这些级数通过turtle复原图形的程序。
-程序：
-    1.读取傅里叶级数信息，解析，并放入data列表中
-    2.用data列表中的参数带入傅里叶级数的方程求得二维坐标
-    3.用turtle依次走过这些坐标达到绘图的效果
-    4.可以绘制多条路径
+多路径高精度版:
+    1.自动查找当前目录下 datas0.txt, datas1.txt, ... 并依次绘制
+    2.每条路径之间自动提笔(正确处理子路径跳点,不再画出多余连接线)
+    3.numpy 分块计算全部系数,速度快且不损失画质
+    4.不再硬编码 N,任意数量的傅里叶系数自动适配
 '''
 
+SAMPLES = [20000, 5000, 5000, 5000]  # 各路径描点数(按文件编号顺序);文件多于列表时,后面的路径用 DEFAULT_SAMPLES
+DEFAULT_SAMPLES = 5000
 
-points = [5000, 100, 100, 100] #不同精度的图片绘制点数不同
+def load_coeffs(path):
+    coeffs = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                coeffs.append(complex(*ast.literal_eval(line)))
 
-N = 1000 + 1 # N由上个程序中计算出的级数数量决定，加1是因为有一个角速度为0的量（直流分量）
-x = [0] * N
-y = [0] * N
-for num in range(4):
-    data = []
-    f = open("datas"+str(num)+".txt","r")
-    for line in f:
-        line = eval(line)
-        data.append(line)
+    def freq(i):  # 下标 i -> 频率 m: 0, +1, -1, +2, -2, ...
+        return 0 if i == 0 else ((i + 1) // 2) * (1 if i % 2 else -1)
 
-    # tl.setup(960,720)
-    tl.penup()
-    tl.pensize(2) # 画笔粗细
-    # 储存原始代码的电脑因新型肺炎疫情被隔离了，这是我根据印象重新做的，可能存在错误，疫情结束后会更正。
-    # 三角函数中的值是n * 2 * pi * t , 其中n取0，1，-1，2，-2……，t的范围是[0,1]，当然t取大了没关系，会重复描已经画好的图形
-    for t in range(points[num]):
-        for i in range(len(data)):
-            if i % 2 == 0:
-                x[i] = data[i][0] * math.cos(i / points[num] * 3.14 * t) - data[i][1] * math.sin(i / points[num] * 3.14 * t)
-                y[i] = data[i][0] * math.sin(i / points[num] * 3.14 * t) + data[i][1] * math.cos(i / points[num] * 3.14 * t)
+    return [(freq(i), c) for i, c in enumerate(coeffs)]
 
-            else:
-                x[i] = data[i][0] * math.cos(-(i+1) / points[num] * 3.14 * t) - data[i][1] * math.sin(-(i+1) / points[num] * 3.14 * t)
-                y[i] = data[i][0] * math.sin(-(i+1) / points[num] * 3.14 * t) + data[i][1] * math.cos(-(i+1) / points[num] * 3.14 * t)
+def compute_points(terms, samples, chunk=1000):
+    """分块 numpy 计算:系数再多也不会撑爆内存"""
+    m = np.array([t[0] for t in terms], dtype=float)
+    c = np.array([t[1] for t in terms], dtype=complex)
+    pts = []
+    for s in range(0, samples, chunk):
+        theta = np.arange(s, min(s + chunk, samples)) / samples * 2 * np.pi
+        Z = (c[:, None] * np.exp(1j * m[:, None] * theta[None, :])).sum(axis=0)
+        pts.extend(zip(Z.real.tolist(), (-Z.imag).tolist()))
+    return pts
 
-        tl.goto(int(sum(x)), -int(sum(y))) # 正负可以控制图形的左右镜像，上下镜像,乘除可以控制缩放
+def main():
+    # 按数字顺序找到 datas0.txt, datas1.txt, ...(不会误匹配单路径版的 datas.txt)
+    files = sorted(glob.glob("datas[0-9]*.txt"),
+                   key=lambda p: int(re.search(r"\d+", p).group()))
+    if not files:
+        print("没有找到 datas0.txt, datas1.txt, ...")
+        return
+
+    tl.setup(960, 720)
+    tl.tracer(0, 0)          # 关闭逐帧动画,统一手动刷新
+    tl.hideturtle()
+    tl.pensize(1)            # 高分辨率下用细笔
+
+    for num, path in enumerate(files):
+        samples = SAMPLES[num] if num < len(SAMPLES) else DEFAULT_SAMPLES
+        terms = load_coeffs(path)
+        pts = compute_points(terms, samples)
+
+        tl.penup()           # 每条新路径先提笔,跳点处不连线
+        tl.goto(pts[0])
         tl.pendown()
+        for i, p in enumerate(pts):
+            tl.goto(p)
+            if i % 200 == 0:
+                tl.update()
+        print(f"{path} 绘制完成({len(terms)} 个系数, {samples} 个描点)")
+
+    tl.update()
+    tl.done()
+
+if __name__ == "__main__":
+    main()
