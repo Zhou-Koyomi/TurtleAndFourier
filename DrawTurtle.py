@@ -1,42 +1,46 @@
 import turtle as tl
-import math
+import ast
+import numpy as np
 
-'''
-作者：北理咕小头
-简介：
-    这是一个导入图形傅里叶级数信息，并利用这些级数通过turtle复原图形的程序。
-程序：
-    1.读取傅里叶级数信息，解析，并放入data列表中
-    2.用data列表中的参数带入傅里叶级数的方程求得二维坐标
-    3.用turtle依次走过这些坐标达到绘图的效果
-'''
+def load_coeffs(path="datas.txt"):
+    coeffs = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                coeffs.append(complex(*ast.literal_eval(line)))
 
-data = []
-points = 5000
+    def freq(i):  # 下标 i -> 频率 m: 0, +1, -1, +2, -2, ...
+        return 0 if i == 0 else ((i + 1) // 2) * (1 if i % 2 else -1)
 
-f = open("datas.txt","r")
-for line in f:
-    line = eval(line)
-    data.append(line)
+    return [(freq(i), c) for i, c in enumerate(coeffs)]
 
-N = len(data) + 1 # N由上个程序中计算出的级数数量决定，加1是因为有一个角速度为0的量（直流分量）
-x = [0] * N
-y = [0] * N
+def compute_points(terms, samples=20000, chunk=1000):
+    """分块 numpy 计算:控制内存,4001 项 x 20000 点约几秒"""
+    m = np.array([t[0] for t in terms], dtype=float)
+    c = np.array([t[1] for t in terms], dtype=complex)
+    pts = []
+    for s in range(0, samples, chunk):
+        theta = np.arange(s, min(s + chunk, samples)) / samples * 2 * np.pi
+        Z = (c[:, None] * np.exp(1j * m[:, None] * theta[None, :])).sum(axis=0)
+        pts.extend(zip(Z.real.tolist(), (-Z.imag).tolist()))
+    return pts
 
-# tl.setup(960,720)
-tl.penup()
-tl.pensize(2) # 画笔粗细
-# 储存原始代码的电脑因新型肺炎疫情被隔离了，这是我根据印象重新做的，可能存在错误，疫情结束后会更正。
-# 三角函数中的值是n * 2 * pi * t , 其中n取0，1，-1，2，-2……，t的范围是[0,1]，当然t取大了没关系，会重复描已经画好的图形
-for t in range(points):
-    for i in range(len(data)):
-        if i % 2 == 0:
-            x[i] = data[i][0] * math.cos(i / points * 3.14 * t) - data[i][1] * math.sin(i / points * 3.14 * t)
-            y[i] = data[i][0] * math.sin(i / points * 3.14 * t) + data[i][1] * math.cos(i / points * 3.14 * t)
-
-        else:
-            x[i] = data[i][0] * math.cos(-(i+1) / points * 3.14 * t) - data[i][1] * math.sin(-(i+1) / points * 3.14 * t)
-            y[i] = data[i][0] * math.sin(-(i+1) / points * 3.14 * t) + data[i][1] * math.cos(-(i+1) / points * 3.14 * t)
-
-    tl.goto(int(sum(x)), -int(sum(y))) # 正负可以控制图形的左右镜像，上下镜像,乘除可以控制缩放
+def draw(pts):
+    tl.setup(960, 720)
+    tl.tracer(0, 0)
+    tl.hideturtle()
+    tl.penup()
+    tl.pensize(1.4)          # 可调画笔粗细
+    tl.goto(pts[0])
     tl.pendown()
+    for i, p in enumerate(pts):
+        tl.goto(p)
+        if i % 200 == 0:
+            tl.update()
+    tl.update()
+    tl.done()
+
+if __name__ == "__main__":
+    terms = load_coeffs("datas.txt")        # 自动读取全部 4001 项,无需改 N
+    draw(compute_points(terms, samples=20000))
