@@ -42,7 +42,7 @@ def numSolve(m,cs,ce,pts):#主要计算函数2-贝塞尔曲线方程代入
 def cpToList(cp):
     return [cp.real,cp.imag]
 start = 0
-end = 1000#圆圈数量
+end = 4000#圆圈数量
 prjNum = end-start+1
 prjCur = None
 points = []#贝塞尔采集点
@@ -75,7 +75,7 @@ def mainCalculation(s):
 
 
 if __name__ == '__main__':
-    with open('rawvertexes.txt', 'r') as f:#读取并解析SVG信息
+    with open('rawvertexes1.txt', 'r') as f:#读取并解析SVG信息
         rawdata = f.readlines()
         curve = re.sub(r'\s','',"".join(rawdata))
         cells = re.findall(r'\w[\d\,\-\.]+',curve)
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     print("Weight process start.")#计算时间权重
     wsum = 0
     for curve in points:#Calculate weight
-        wst = 10 #steps
+        wst = 100 #steps
         sum = 0
         for i in range(1,wst):
             sum+=abs(bezier(linear(i,0,wst,0,1),curve[0],curve[1],curve[2],curve[3])-
